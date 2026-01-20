@@ -5,7 +5,7 @@
 <title>Heart Bound</title>
 <style>
 body {margin:0; overflow:hidden; font-family:Arial,sans-serif; background:#111;}
-canvas {display:block; margin:auto; background: #6ec6ff;}
+canvas {display:block; margin:auto; background:#6ec6ff;}
 /* Menu */
 #menu {
   position:absolute; inset:0;
@@ -16,11 +16,7 @@ canvas {display:block; margin:auto; background: #6ec6ff;}
   justify-content:flex-start;
   padding-top:40px;
 }
-#menu h1 {
-  font-size:70px;
-  margin-bottom:60px;
-  text-align:center;
-}
+#menu h1 {font-size:70px; margin-bottom:60px; text-align:center;}
 #menuTopLeft {
   position:absolute; top:20px; left:20px;
   display:flex; flex-direction:column;
@@ -39,11 +35,7 @@ button {margin-bottom:10px; font-size:18px; padding:8px 16px; cursor:pointer;}
 }
 #menuHeart::before {top:-75px;}
 #menuHeart::after {left:75px;}
-#playBtn {
-  width:120px; height:60px;
-  background:green; color:white; font-weight:bold; font-size:24px;
-  border:none; cursor:pointer; border-radius:10px;
-}
+#playBtn {width:120px; height:60px; background:green; color:white; font-weight:bold; font-size:24px; border:none; cursor:pointer; border-radius:10px;}
 #rulesDiv {
   display:none; position:absolute; inset:0; background:#222; color:#fff;
   padding:20px; overflow:auto;
@@ -51,9 +43,9 @@ button {margin-bottom:10px; font-size:18px; padding:8px 16px; cursor:pointer;}
 #rulesDiv h2 {margin-top:0;}
 #closeRules {margin-top:20px; padding:10px 20px; cursor:pointer;}
 /* Footer */
-#footer {
-  position:absolute; bottom:10px; left:10px; color:#fff; font-size:16px;
-}
+#footer {position:absolute; bottom:10px; left:10px; color:#fff; font-size:16px;}
+#pauseBtn {position:absolute; top:10px; right:10px; padding:10px 20px; font-size:18px; cursor:pointer;}
+#retryBtn {display:none; position:absolute; left:50%; top:260px; transform:translateX(-50%); padding:15px 30px; font-size:22px; background:red; color:white; border:none; cursor:pointer; border-radius:10px;}
 </style>
 </head>
 <body>
@@ -65,6 +57,11 @@ button {margin-bottom:10px; font-size:18px; padding:8px 16px; cursor:pointer;}
     <button id="rulesBtn">Rules</button>
   </div>
   <div id="menuHeart"></div>
+  <div>
+    <button class="difficultyBtn" data-diff="easy">Easy</button>
+    <button class="difficultyBtn" data-diff="medium">Medium</button>
+    <button class="difficultyBtn" data-diff="hard">Hard</button>
+  </div>
   <button id="playBtn">PLAY</button>
 </div>
 
@@ -78,6 +75,8 @@ button {margin-bottom:10px; font-size:18px; padding:8px 16px; cursor:pointer;}
 </div>
 
 <div id="footer">Created by Keagan Unsworth</div>
+<button id="pauseBtn">Pause</button>
+<button id="retryBtn">Retry</button>
 
 <canvas id="game" width="900" height="450"></canvas>
 
@@ -87,6 +86,7 @@ const ctx = canvas.getContext("2d");
 
 // Game state
 let gameRunning=false, score=0, lives=3, won=false, highScore=localStorage.getItem('heartBoundHigh') || 0;
+let paused=false, difficulty="medium";
 
 // Player
 const player = {x:120, y:0, vy:0, jumping:false, width:10, height:40};
@@ -103,7 +103,7 @@ let fireworks=[];
 // Messages
 let msg1000=false, msg5000=false, msg10000=false;
 
-// Menu & rules
+// Menu & controls
 const menu = document.getElementById("menu");
 const playBtn = document.getElementById("playBtn");
 const rulesBtn = document.getElementById("rulesBtn");
@@ -111,20 +111,36 @@ const rulesDiv = document.getElementById("rulesDiv");
 const closeRules = document.getElementById("closeRules");
 const highScoreDiv = document.getElementById("highScore");
 const menuHeart = document.getElementById("menuHeart");
+const pauseBtn = document.getElementById("pauseBtn");
+const retryBtn = document.getElementById("retryBtn");
+const diffButtons = document.querySelectorAll(".difficultyBtn");
+
+highScoreDiv.innerText = "High Score: " + highScore;
+
+// Difficulty selection
+diffButtons.forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    difficulty = btn.dataset.diff;
+    alert("Difficulty set to " + difficulty);
+  });
+});
 
 playBtn.addEventListener("click", startGame);
 rulesBtn.addEventListener("click", ()=>rulesDiv.style.display="block");
 closeRules.addEventListener("click", ()=>rulesDiv.style.display="none");
+pauseBtn.addEventListener("click",()=>{paused=!paused; pauseBtn.innerText=paused?"Resume":"Pause"; if(!paused) loop();});
+retryBtn.addEventListener("click", ()=>startGame());
 
+// Controls
 document.addEventListener("keydown", e=>{
-  if(e.code==="Space" && !player.jumping){ player.vy=-14; player.jumping=true; }
+  if(e.code==="Space" && !player.jumping && !paused){ player.vy=-14; player.jumping=true; }
 });
 
+// Menu heart animation
 let heartScale=1, heartGrowing=true;
 function animateHeart(){
   if(!menu.style.display || menu.style.display=="none") return;
-  if(heartGrowing) heartScale += 0.01;
-  else heartScale -= 0.01;
+  heartScale += heartGrowing?0.01:-0.01;
   if(heartScale>=1.2) heartGrowing=false;
   if(heartScale<=0.9) heartGrowing=true;
   menuHeart.style.transform = `rotate(-45deg) scale(${heartScale})`;
@@ -132,59 +148,55 @@ function animateHeart(){
 }
 animateHeart();
 
+// Start game
 function startGame(){
   menu.style.display="none";
-  gameRunning=true;
+  retryBtn.style.display="none";
+  gameRunning=true; paused=false; pauseBtn.innerText="Pause";
   score=0; lives=3;
-  obstacle.x=900; obstacle.passed=false; bubble.x=1400; bubble.collected=false;
+  obstacle.x=900; obstacle.passed=false;
+  bubble.x=1400; bubble.collected=false;
   won=false; msg1000=false; msg5000=false; msg10000=false;
   player.y = playerOnGrassY();
-  obstacle.speed = 3 + Math.random()*3;
+  setObstacleSpeed();
   obstacle.y = playerOnGrassY() + player.height - obstacle.h;
   requestAnimationFrame(loop);
 }
 
+// Difficulty speeds
+function setObstacleSpeed(){
+  switch(difficulty){
+    case "easy": obstacle.speed = 3 + Math.random()*2; break;
+    case "medium": obstacle.speed = 5 + Math.random()*2; break;
+    case "hard": obstacle.speed = 7 + Math.random()*3; break;
+  }
+}
+
 function playerOnGrassY(){ return 350 - player.height; }
 
+// Draw functions
 function drawBackground(){
   ctx.fillStyle="#6ec6ff"; ctx.fillRect(0,0,900,450);
   const colors=["red","orange","yellow","green","blue","purple"];
-  colors.forEach((c,i)=>{
-    ctx.strokeStyle=c; ctx.lineWidth=7;
-    ctx.beginPath();
-    ctx.arc(750,400,120-i*10,Math.PI,2*Math.PI);
-    ctx.stroke();
-  });
+  colors.forEach((c,i)=>{ ctx.strokeStyle=c; ctx.lineWidth=7; ctx.beginPath(); ctx.arc(750,400,120-i*10,Math.PI,2*Math.PI); ctx.stroke(); });
   ctx.fillStyle="#4caf50"; ctx.fillRect(0,350,900,100);
   ctx.fillStyle="#8B4513"; ctx.fillRect(0,390,900,60);
   ctx.fillStyle="#fff";
-  [[200,80],[230,80],[260,80],[600,60],[630,60],[660,60]].forEach(([cx,cy])=>{
-    ctx.beginPath();
-    ctx.arc(cx,cy,30,0,Math.PI*2); ctx.fill();
-  });
+  [[200,80],[230,80],[260,80],[600,60],[630,60],[660,60]].forEach(([cx,cy])=>{ ctx.beginPath(); ctx.arc(cx,cy,30,0,Math.PI*2); ctx.fill(); });
 }
 
 function drawPlayer(){
   const x=player.x, y=player.y;
   ctx.strokeStyle="#000"; ctx.lineWidth=3;
-  ctx.beginPath();
-  ctx.moveTo(x,y); ctx.lineTo(x,y-30); ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x,y-20); ctx.lineTo(x-10,y-10);
-  ctx.moveTo(x,y-20); ctx.lineTo(x+10,y-10); ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x,y); ctx.lineTo(x-10,y+20);
-  ctx.moveTo(x,y); ctx.lineTo(x+10,y+20); ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(x,y-40,8,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y-30); ctx.stroke(); // body
+  ctx.beginPath(); ctx.moveTo(x,y-20); ctx.lineTo(x-10,y-10); ctx.moveTo(x,y-20); ctx.lineTo(x+10,y-10); ctx.stroke(); // arms
+  ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-10,y+20); ctx.moveTo(x,y); ctx.lineTo(x+10,y+20); ctx.stroke(); // legs
+  ctx.beginPath(); ctx.arc(x,y-40,8,0,Math.PI*2); ctx.stroke(); // head
 }
 
 function drawLives(){
   for(let i=0;i<lives;i++){
-    ctx.fillStyle="red"; 
-    ctx.beginPath();
-    ctx.arc(25+i*30,25,7,0,Math.PI*2);
-    ctx.arc(33+i*30,25,7,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle="red"; ctx.beginPath(); ctx.arc(25+i*30,25,7,0,Math.PI*2); ctx.arc(33+i*30,25,7,0,Math.PI*2); ctx.fill();
   }
 }
 
@@ -197,41 +209,41 @@ function createFirework(){
 }
 
 function drawFireworks(){
-  fireworks.forEach(f=>{
-    ctx.fillStyle=f.color;
-    ctx.beginPath(); ctx.arc(f.x,f.y,3,0,Math.PI*2); ctx.fill();
-    f.x+=f.dx; f.y+=f.dy; f.life--;
-  });
+  fireworks.forEach(f=>{ ctx.fillStyle=f.color; ctx.beginPath(); ctx.arc(f.x,f.y,3,0,Math.PI*2); ctx.fill(); f.x+=f.dx; f.y+=f.dy; f.life--; });
   fireworks = fireworks.filter(f=>f.life>0);
 }
 
 function gameOver(){
   gameRunning=false;
+  retryBtn.style.display="block";
   if(score>highScore){localStorage.setItem('heartBoundHigh',score);}
-  ctx.fillStyle="black"; ctx.font="60px Arial";
-  ctx.fillText("GAME OVER",280,200);
-  ctx.font="30px Arial";
-  ctx.fillText("Refresh to Restart",320,260);
-  highScoreDiv.innerText = "High Score: " + Math.max(score,highScore);
+  highScore = Math.max(score, highScore);
+  highScoreDiv.innerText = "High Score: " + highScore;
+  ctx.fillStyle="black"; ctx.font="60px Arial"; ctx.fillText("GAME OVER",280,200);
 }
 
+// Main loop
 function loop(){
-  if(!gameRunning) return;
+  if(!gameRunning || paused) return;
   ctx.clearRect(0,0,900,450);
   drawBackground();
 
+  // Player gravity
   player.vy+=0.8; player.y+=player.vy;
   if(player.y>=playerOnGrassY()){player.y=playerOnGrassY(); player.vy=0; player.jumping=false;}
 
+  // Obstacle movement
   obstacle.x-=obstacle.speed;
-  if(obstacle.x<-50){obstacle.x=900; obstacle.passed=false; obstacle.speed = 3 + Math.random()*4;}
+  if(obstacle.x<-50){obstacle.x=900; obstacle.passed=false; setObstacleSpeed();}
   if(!obstacle.passed && obstacle.x<player.x){score+=100; obstacle.passed=true;}
 
+  // Collision
   if(player.x+5>obstacle.x && player.x-5<obstacle.x+obstacle.w && player.y+player.height>obstacle.y){
     lives--; obstacle.x=900;
     if(lives<=0) return gameOver();
   }
 
+  // Bubble
   bubble.x-=3;
   ctx.strokeStyle="white"; ctx.beginPath(); ctx.arc(bubble.x,bubble.y,bubble.r,0,Math.PI*2); ctx.stroke();
   ctx.fillStyle="black"; ctx.fillText("+50",bubble.x-12,bubble.y+5);
@@ -239,26 +251,25 @@ function loop(){
     score+=50; bubble.collected=true; bubble.x=1400;
   }
 
+  // Draw
   drawPlayer();
   ctx.fillStyle="#4caf50"; ctx.fillRect(obstacle.x,obstacle.y,obstacle.w,15);
   ctx.fillStyle="#8B4513"; ctx.fillRect(obstacle.x,obstacle.y+15,obstacle.w,obstacle.h-15);
-
   drawLives();
   ctx.fillStyle="black"; ctx.font="20px Arial"; ctx.fillText("Score: "+score,760,30);
 
+  // Messages
   if(score>=1000 && !msg1000){msg1000=true; createFirework();}
   if(msg1000 && score<=1100){ctx.fillStyle="red"; ctx.font="50px Arial"; ctx.fillText("I LOVE YOU ❤️",260,150); ctx.fillStyle="gold"; ctx.font="40px Arial"; ctx.fillText("👑 WINNER 👑",300,220);}
   if(score>=5000 && !msg5000){msg5000=true;}
   if(msg5000 && score<=5100){ctx.fillStyle="blue"; ctx.font="40px Arial"; ctx.fillText("Keep Going!",320,180);}
   if(score>=10000 && !msg10000){msg10000=true;}
   if(msg10000 && score<=10100){ctx.fillStyle="purple"; ctx.font="40px Arial"; ctx.fillText("Thank you for everything ❤️",180,180);}
-
-  if(won){drawFireworks();}
+  if(won) drawFireworks();
 
   requestAnimationFrame(loop);
 }
 
-highScoreDiv.innerText = "High Score: " + highScore;
 </script>
 </body>
 </html>
