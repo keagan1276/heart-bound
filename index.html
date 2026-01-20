@@ -5,7 +5,8 @@
 <title>Heart Bound</title>
 <style>
 body {margin:0; overflow:hidden; font-family:Arial,sans-serif; background:#111;}
-canvas {display:block; margin:auto; background:#6ec6ff;}
+canvas {display:block; margin:auto;}
+
 /* Menu */
 #menu {
   position:absolute; inset:0;
@@ -42,9 +43,11 @@ button {margin-bottom:10px; font-size:18px; padding:8px 16px; cursor:pointer;}
 }
 #rulesDiv h2 {margin-top:0;}
 #closeRules {margin-top:20px; padding:10px 20px; cursor:pointer;}
+
 /* Footer */
 #footer {position:absolute; bottom:10px; left:10px; color:#fff; font-size:16px;}
 #pauseBtn {position:absolute; top:10px; right:10px; padding:10px 20px; font-size:18px; cursor:pointer;}
+#menuBtn {position:absolute; top:60px; right:10px; padding:10px 20px; font-size:18px; cursor:pointer;}
 #retryBtn {display:none; position:absolute; left:50%; top:260px; transform:translateX(-50%); padding:15px 30px; font-size:22px; background:red; color:white; border:none; cursor:pointer; border-radius:10px;}
 </style>
 </head>
@@ -68,14 +71,16 @@ button {margin-bottom:10px; font-size:18px; padding:8px 16px; cursor:pointer;}
 <div id="rulesDiv">
   <h2>How to Play</h2>
   <p>Jump over the blocks by pressing SPACE.</p>
-  <p>Collect the bubble by standing still on it for +50 points.</p>
+  <p>Collect the bubble (+50 points) by jumping into it.</p>
   <p>Each block gives +100 points. Avoid hitting blocks! You have 3 lives.</p>
-  <p>Fireworks appear at 1000 points. Special messages at 5000 and 10000 points.</p>
+  <p>Difficulty changes block speed: Easy, Medium, Hard.</p>
+  <p>Pause the game using the Pause button. Retry appears on game over.</p>
   <button id="closeRules">Close</button>
 </div>
 
 <div id="footer">Created by Keagan Unsworth</div>
 <button id="pauseBtn">Pause</button>
+<button id="menuBtn">Main Menu</button>
 <button id="retryBtn">Retry</button>
 
 <canvas id="game" width="900" height="450"></canvas>
@@ -85,8 +90,9 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 // Game state
-let gameRunning=false, score=0, lives=3, won=false, highScore=localStorage.getItem('heartBoundHigh') || 0;
+let gameRunning=false, score=0, lives=3, highScore=localStorage.getItem('heartBoundHigh') || 0;
 let paused=false, difficulty="medium";
+let fireworks=[];
 
 // Player
 const player = {x:120, y:0, vy:0, jumping:false, width:10, height:40};
@@ -97,12 +103,6 @@ const obstacle = {x:900, y:0, w:50, h:40, speed:5, passed:false};
 // Bubble
 const bubble = {x:1400, y:260, r:18, collected:false};
 
-// Fireworks
-let fireworks=[];
-
-// Messages
-let msg1000=false, msg5000=false, msg10000=false;
-
 // Menu & controls
 const menu = document.getElementById("menu");
 const playBtn = document.getElementById("playBtn");
@@ -112,6 +112,7 @@ const closeRules = document.getElementById("closeRules");
 const highScoreDiv = document.getElementById("highScore");
 const menuHeart = document.getElementById("menuHeart");
 const pauseBtn = document.getElementById("pauseBtn");
+const menuBtn = document.getElementById("menuBtn");
 const retryBtn = document.getElementById("retryBtn");
 const diffButtons = document.querySelectorAll(".difficultyBtn");
 
@@ -129,6 +130,12 @@ playBtn.addEventListener("click", startGame);
 rulesBtn.addEventListener("click", ()=>rulesDiv.style.display="block");
 closeRules.addEventListener("click", ()=>rulesDiv.style.display="none");
 pauseBtn.addEventListener("click",()=>{paused=!paused; pauseBtn.innerText=paused?"Resume":"Pause"; if(!paused) loop();});
+menuBtn.addEventListener("click", ()=>{
+  gameRunning=false;
+  paused=false;
+  retryBtn.style.display="none";
+  menu.style.display="flex";
+});
 retryBtn.addEventListener("click", ()=>startGame());
 
 // Controls
@@ -156,10 +163,10 @@ function startGame(){
   score=0; lives=3;
   obstacle.x=900; obstacle.passed=false;
   bubble.x=1400; bubble.collected=false;
-  won=false; msg1000=false; msg5000=false; msg10000=false;
   player.y = playerOnGrassY();
   setObstacleSpeed();
   obstacle.y = playerOnGrassY() + player.height - obstacle.h;
+  fireworks = [];
   requestAnimationFrame(loop);
 }
 
@@ -177,12 +184,26 @@ function playerOnGrassY(){ return 350 - player.height; }
 // Draw functions
 function drawBackground(){
   ctx.fillStyle="#6ec6ff"; ctx.fillRect(0,0,900,450);
-  const colors=["red","orange","yellow","green","blue","purple"];
-  colors.forEach((c,i)=>{ ctx.strokeStyle=c; ctx.lineWidth=7; ctx.beginPath(); ctx.arc(750,400,120-i*10,Math.PI,2*Math.PI); ctx.stroke(); });
-  ctx.fillStyle="#4caf50"; ctx.fillRect(0,350,900,100);
-  ctx.fillStyle="#8B4513"; ctx.fillRect(0,390,900,60);
-  ctx.fillStyle="#fff";
-  [[200,80],[230,80],[260,80],[600,60],[630,60],[660,60]].forEach(([cx,cy])=>{ ctx.beginPath(); ctx.arc(cx,cy,30,0,Math.PI*2); ctx.fill(); });
+  ctx.fillStyle="#4caf50"; ctx.fillRect(0,350,900,100); // grass
+  ctx.fillStyle="#8B4513"; ctx.fillRect(0,390,900,60); // dirt
+
+  // Clouds
+  ctx.fillStyle="white";
+  ctx.beginPath(); ctx.arc(150,100,30,0,Math.PI*2); ctx.arc(180,100,40,0,Math.PI*2);
+  ctx.arc(210,100,30,0,Math.PI*2); ctx.fill();
+
+  ctx.beginPath(); ctx.arc(650,80,20,0,Math.PI*2); ctx.arc(670,80,30,0,Math.PI*2);
+  ctx.arc(700,80,20,0,Math.PI*2); ctx.fill();
+
+  // Rainbow
+  const rainbowColors=["red","orange","yellow","green","blue","purple"];
+  rainbowColors.forEach((color,i)=>{
+    ctx.beginPath();
+    ctx.strokeStyle=color;
+    ctx.lineWidth=8;
+    ctx.arc(450,350,100-i*8,Math.PI,2*Math.PI);
+    ctx.stroke();
+  });
 }
 
 function drawPlayer(){
@@ -210,7 +231,7 @@ function createFirework(){
 
 function drawFireworks(){
   fireworks.forEach(f=>{ ctx.fillStyle=f.color; ctx.beginPath(); ctx.arc(f.x,f.y,3,0,Math.PI*2); ctx.fill(); f.x+=f.dx; f.y+=f.dy; f.life--; });
-  fireworks = fireworks.filter(f=>f.life>0);
+  fireworks = fireworks.filter(f=>f.life>0 && score<5200); // disappears after 5200
 }
 
 function gameOver(){
@@ -246,8 +267,8 @@ function loop(){
   // Bubble
   bubble.x-=3;
   ctx.strokeStyle="white"; ctx.beginPath(); ctx.arc(bubble.x,bubble.y,bubble.r,0,Math.PI*2); ctx.stroke();
-  ctx.fillStyle="black"; ctx.fillText("+50",bubble.x-12,bubble.y+5);
-  if(!bubble.collected && Math.abs(player.x-bubble.x)<25 && Math.abs(player.y-bubble.y)<30 && !player.jumping){
+  ctx.fillStyle="black"; ctx.font="12px Arial"; ctx.fillText("+50",bubble.x-12,bubble.y+5);
+  if(!bubble.collected && player.y+player.height>bubble.y-bubble.r && player.y<bubble.y+bubble.r && Math.abs(player.x-bubble.x)<20 && player.vy<0){
     score+=50; bubble.collected=true; bubble.x=1400;
   }
 
@@ -258,14 +279,9 @@ function loop(){
   drawLives();
   ctx.fillStyle="black"; ctx.font="20px Arial"; ctx.fillText("Score: "+score,760,30);
 
-  // Messages
-  if(score>=1000 && !msg1000){msg1000=true; createFirework();}
-  if(msg1000 && score<=1100){ctx.fillStyle="red"; ctx.font="50px Arial"; ctx.fillText("I LOVE YOU ❤️",260,150); ctx.fillStyle="gold"; ctx.font="40px Arial"; ctx.fillText("👑 WINNER 👑",300,220);}
-  if(score>=5000 && !msg5000){msg5000=true;}
-  if(msg5000 && score<=5100){ctx.fillStyle="blue"; ctx.font="40px Arial"; ctx.fillText("Keep Going!",320,180);}
-  if(score>=10000 && !msg10000){msg10000=true;}
-  if(msg10000 && score<=10100){ctx.fillStyle="purple"; ctx.font="40px Arial"; ctx.fillText("Thank you for everything ❤️",180,180);}
-  if(won) drawFireworks();
+  // Fireworks at 5000 points
+  if(score>=5000 && score<5200){createFirework();}
+  drawFireworks();
 
   requestAnimationFrame(loop);
 }
